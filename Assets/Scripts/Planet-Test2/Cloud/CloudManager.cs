@@ -2,7 +2,11 @@
 
 /// <summary>
 /// Drives the EcoCore/CloudShell shader: sets planet center, camera position,
-/// noise scroll, band speeds/limits, etc. No mesh rebuilding involved.
+/// noise time, clearance, and visuals. No mesh rebuilding involved.
+/// 
+/// Refactored:
+/// - Single time parameter controls both curl flow + vertical 3D noise "boiling".
+/// - No latitude bands; movement randomness is handled in the shader via curl noise.
 /// </summary>
 [RequireComponent(typeof(MeshRenderer))]
 public class CloudManager : MonoBehaviour
@@ -10,7 +14,6 @@ public class CloudManager : MonoBehaviour
     [Header("Links")]
     public Transform planetCenter;
     public Transform cameraTransform;
-
     public SunRotate sunRotate;
 
     [Header("Noise / Coverage")]
@@ -23,32 +26,18 @@ public class CloudManager : MonoBehaviour
 
     public int cloudSeed = 42;
 
-    [Header("Animation / Scrolling")]
+    [Header("Animation")]
     public bool animate = true;
 
-    [Tooltip("Direction in which the base noise field scrolls.")]
-    public Vector3 noiseScrollDirection = new Vector3(1f, 0f, 0.3f);
+    [Tooltip("Speed of curl/advection (x in _NoiseOffset).")]
+    public float curlSpeed = 0.25f;
 
-    [Tooltip("Speed multiplier for noise scrolling.")]
-    public float noiseScrollSpeed = 0.1f;
+    [Tooltip("Speed of boiling (z-slice scrolling, y in _NoiseOffset).")]
+    public float boilSpeed = 0.25f;
 
-    [Header("Latitudinal Bands (|sin(lat)|)")]
-    [Range(0f, 1f)]
-    [Tooltip("Equator band extent in |sin(lat)| (e.g. 0.25 ≈ ±14°).")]
-    public float equatorBandLimit = 0.25f;
-
-    [Range(0f, 1f)]
-    [Tooltip("Mid-latitude band extent in |sin(lat)| (above equator band).")]
-    public float midBandLimit = 0.6f;
-
-    [Tooltip("Relative scroll speed in the equatorial band.")]
-    public float equatorBandSpeed = 1.0f;
-
-    [Tooltip("Relative scroll speed in the mid-latitude band.")]
-    public float midBandSpeed = 0.7f;
-
-    [Tooltip("Relative scroll speed in the polar band.")]
-    public float polarBandSpeed = 0.4f;
+    [Header("Depth / Layering")]
+    [Tooltip("How strongly shell height affects the 3D noise pattern.")]
+    public float heightNoiseScale = 0.5f;
 
     [Header("Camera Clearance")]
     public float clearanceRadius = 15f;  // fully clear
@@ -59,16 +48,21 @@ public class CloudManager : MonoBehaviour
     [Range(0f, 1f)] public float cloudOpacity = 0.9f;
 
     private Material _mat;
-    private Vector3 _noiseScrollOffset;
 
+    // single time parameter used by shader for curl & vertical noise scrolling
+    //private float _timeParam = 0f;
+
+    // remember last day fraction from SunRotate so we can handle wrap-around
     [SerializeField, Range(0f, 1f)]
     private float lastTimeOfDay = -1f;
+
+    private float _curlTime = 0f;
+    private float _boilTime = 0f;
 
     private void Awake()
     {
         var mr = GetComponent<MeshRenderer>();
-        // Use .material so each planet has its own material instance
-        _mat = mr.material;
+        _mat = mr.material; // per-instance material
     }
 
     private void Update()
@@ -77,68 +71,53 @@ public class CloudManager : MonoBehaviour
             return;
 
         // ----------------------------------------------------------------
-        // 1. Update scroll offset (using simulated time if SunRotate exists)
+        // 1. Advance time parameter
         // ----------------------------------------------------------------
         if (animate)
         {
-            Vector3 dir = noiseScrollDirection.sqrMagnitude > 0.0001f
-                ? noiseScrollDirection.normalized
-                : Vector3.zero;
+            float delta = 0f;
 
             if (sunRotate != null)
             {
-                // Use SunRotate's time-of-day as the single source of truth,
-                // same idea as TemperatureManager.
-                float currentDayT = sunRotate.GetTimeOfDay(); // 0..1 over a full day
-
-                // First frame: just initialize, don't scroll yet.
+                float currentDayT = sunRotate.GetTimeOfDay();
                 if (lastTimeOfDay < 0f)
                 {
                     lastTimeOfDay = currentDayT;
                 }
                 else
                 {
-                    // Fraction of a day that has passed since last frame (handles wrap).
                     float deltaDay = currentDayT - lastTimeOfDay;
                     if (deltaDay < 0f)
                         deltaDay += 1f;
-
-                    // Scroll proportional to in-game day fraction.
-                    // noiseScrollSpeed is "offset units per in-game day".
-                    _noiseScrollOffset += dir * (noiseScrollSpeed * deltaDay);
-
+                    delta = deltaDay;
                     lastTimeOfDay = currentDayT;
                 }
             }
             else
             {
-                // Fallback: use real-time seconds if no SunRotate is wired up.
-                // Here noiseScrollSpeed is "offset units per real-time second".
-                _noiseScrollOffset += dir * (noiseScrollSpeed * Time.deltaTime);
+                delta = Time.deltaTime;
             }
+
+            _curlTime += curlSpeed * delta;
+            _boilTime += boilSpeed * delta;
         }
 
         // ----------------------------------------------------------------
         // 2. Push parameters to the material
         // ----------------------------------------------------------------
 
-        // --- Core noise/coverage ---
+        // Core noise / coverage
         _mat.SetFloat("_CloudFrequency", cloudFrequency);
         _mat.SetFloat("_CoverageBias", coverageBias);
         _mat.SetFloat("_CloudSeed", cloudSeed);
 
-        _mat.SetVector("_NoiseOffset", _noiseScrollOffset);
+        // Pack curl into x, boil into y
+        _mat.SetVector("_NoiseOffset", new Vector4(_curlTime, _boilTime, 0f, 0f));
+
         _mat.SetVector("_PlanetCenter", planetCenter.position);
+        _mat.SetFloat("_HeightNoiseScale", heightNoiseScale);
 
-        // --- Band parameters ---
-        _mat.SetFloat("_EqBandLimit", equatorBandLimit);
-        _mat.SetFloat("_MidBandLimit", midBandLimit);
-
-        _mat.SetFloat("_EqBandSpeed", equatorBandSpeed);
-        _mat.SetFloat("_MidBandSpeed", midBandSpeed);
-        _mat.SetFloat("_PolarBandSpeed", polarBandSpeed);
-
-        // --- Camera clearance + visuals ---
+        // Camera clearance + visuals
         _mat.SetFloat("_ClearanceRadius", clearanceRadius);
         _mat.SetFloat("_ClearanceFade", clearanceFade);
 

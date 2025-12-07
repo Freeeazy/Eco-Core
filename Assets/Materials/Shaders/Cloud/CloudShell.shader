@@ -7,27 +7,25 @@ Shader "EcoCore/CloudShell"
 
         _CloudFrequency ("Cloud Frequency", Float) = 0.25
         _CoverageBias   ("Coverage Bias", Range(0,1)) = 0.4
-        _CloudSeed      ("Cloud Seed", Float) = 42
+        _CloudSeed      ("Cloud Seed",   Float) = 42
 
-        _NoiseOffset ("Noise Offset", Vector) = (0,0,0,0)
-        _PlanetCenter ("Planet Center", Vector) = (0,0,0,0)
+        _NoiseOffset   ("Noise Time (x=curl, y=boil)", Vector) = (0,0,0,0)
+        _PlanetCenter  ("Planet Center", Vector) = (0,0,0,0)
 
         _ClearanceRadius ("Clearance Radius", Float) = 15
-        _ClearanceFade   ("Clearance Fade", Float) = 5
-
-        _SoftBottom ("Bottom Softness", Range(0,1)) = 0.2
-        _SoftTop    ("Top Softness", Range(0,1)) = 0.2
+        _ClearanceFade   ("Clearance Fade",   Float) = 5
 
         _CloudInnerRadius ("Cloud Inner Radius", Float) = 51
         _CloudOuterRadius ("Cloud Outer Radius", Float) = 55
 
-        // Latitudinal banding (|sin(lat)|)
-        _EqBandLimit   ("Equator Band Limit |sin(lat)|", Range(0,1)) = 0.25
-        _MidBandLimit  ("Mid Band Limit |sin(lat)|",     Range(0,1)) = 0.6
+        // Depth / layering
+        //_HeightNoiseScale ("Height Noise Scale", Float) = 0.5
 
-        _EqBandSpeed    ("Equator Band Speed", Float) = 1.0
-        _MidBandSpeed   ("Mid Band Speed",    Float) = 0.7
-        _PolarBandSpeed ("Polar Band Speed",  Float) = 0.4
+        // Curl noise controls
+        _CurlFrequency ("Curl Frequency", Float) = 1.0
+        _CurlStrength  ("Curl Strength",  Float) = 0.25
+
+        _BoilFrequency ("Boil Frequency (time->slice)", Float) = 1.0
     }
 
     SubShader
@@ -57,7 +55,7 @@ Shader "EcoCore/CloudShell"
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
                 float2 uv         : TEXCOORD0;
-                float2 uv2        : TEXCOORD1; // y = height factor 0..1 (if you want)
+                float2 uv2        : TEXCOORD1; // y = height factor 0..1
             };
 
             struct Varyings
@@ -82,20 +80,17 @@ Shader "EcoCore/CloudShell"
             float  _ClearanceRadius;
             float  _ClearanceFade;
 
-            float  _SoftBottom;
-            float  _SoftTop;
-
             float  _CloudInnerRadius;
             float  _CloudOuterRadius;
 
-            float  _EqBandLimit;
-            float  _MidBandLimit;
+            //float  _HeightNoiseScale;
 
-            float  _EqBandSpeed;
-            float  _MidBandSpeed;
-            float  _PolarBandSpeed;
+            float  _CurlFrequency;
+            float  _CurlStrength;
 
-            // --- simple 2D value noise (0..1) -------------------------
+            float _BoilFrequency;
+
+            // ---- 2D value noise (0..1) -----------------------------------
 
             float hash21(float2 p)
             {
@@ -118,51 +113,20 @@ Shader "EcoCore/CloudShell"
                 return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
             }
 
-            // Compute band-specific offset from global _NoiseOffset and latitude
-            float3 ComputeBandFlow(float3 dir)
-            {
-                float lat = dir.y;          // sin(latitude), -1..1
-                float s   = abs(lat);       // 0 at equator, 1 at poles
-            
-                // Smooth band weights
-                float wEq  = 1.0 - s;              // strongest near equator
-                float wMid = 4.0 * s * (1.0 - s);  // strongest mid-lats
-                float wPol = s;                    // strongest near poles
-            
-                float sum = max(wEq + wMid + wPol, 1e-4);
-                wEq  /= sum;
-                wMid /= sum;
-                wPol /= sum;
-            
-                // Blend band speeds into a scalar “zonal” speed at this latitude
-                // (you can set _EqBandSpeed/_MidBandSpeed/_PolarBandSpeed positive/negative
-                // to make some bands run opposite directions)
-                float zonalSpeed = wEq * _EqBandSpeed
-                                 + wMid * _MidBandSpeed
-                                 + wPol * _PolarBandSpeed;
-            
-                // East: tangent around spin axis (Y)
-                float3 east = normalize(float3(-dir.z, 0.0001, dir.x));
-            
-                // For now: ONLY zonal flow (no meridional poleward source),
-                // so we don’t “spawn” everything at the equator.
-                return east * zonalSpeed;
-            }
+            // ---- 3D value noise (0..1) -----------------------------------
 
-            // --- 3D value noise (0..1) -----------------------------------------
             float hash31(float3 p)
             {
-                // simple, cheap hash; good enough for clouds
                 p = frac(p * 0.1031);
                 p += dot(p, p.yzx + 33.33);
                 return frac((p.x + p.y) * p.z);
             }
-            
+
             float noise3D(float3 p)
             {
                 float3 i = floor(p);
                 float3 f = frac(p);
-            
+
                 float n000 = hash31(i + float3(0,0,0));
                 float n100 = hash31(i + float3(1,0,0));
                 float n010 = hash31(i + float3(0,1,0));
@@ -171,38 +135,79 @@ Shader "EcoCore/CloudShell"
                 float n101 = hash31(i + float3(1,0,1));
                 float n011 = hash31(i + float3(0,1,1));
                 float n111 = hash31(i + float3(1,1,1));
-            
+
                 float3 u = f * f * (3.0 - 2.0 * f);
-            
+
                 float n00 = lerp(n000, n100, u.x);
                 float n10 = lerp(n010, n110, u.x);
                 float n01 = lerp(n001, n101, u.x);
                 float n11 = lerp(n011, n111, u.x);
-            
+
                 float n0 = lerp(n00, n10, u.y);
                 float n1 = lerp(n01, n11, u.y);
-            
+
                 return lerp(n0, n1, u.z);
             }
 
-            float sampleSphereNoiseScrolled(float3 dir, float3 flowDir)
+            float3 RotateAroundY(float3 v, float angle)
             {
-                float freq = _CloudFrequency;
-                float t    = _NoiseOffset.x;  // driven by CloudManager (simulated time)
+                float s = sin(angle);
+                float c = cos(angle);
             
-                // Base position on a sphere
-                float3 baseP = dir * freq;
+                return float3(
+                    c * v.x + s * v.z,
+                    v.y,
+                   -s * v.x + c * v.z
+                );
+            }
+
+            // ---- Curl-like 2D flow from scalar noise ---------------------
+
+            float2 CurlNoise2D(float2 uv, float time)
+            {
+                float2 p = uv * _CurlFrequency;
+
+                float e = 0.01;
+
+                float nUp   = noise2D(p + float2(0, e));
+                float nDown = noise2D(p - float2(0, e));
+                float nRight= noise2D(p + float2(e, 0));
+                float nLeft = noise2D(p - float2(e, 0));
+
+                float2 grad = float2(nRight - nLeft, nUp - nDown);
+
+                // Perpendicular to gradient = curl-ish flow
+                float2 curl = float2(grad.y, -grad.x);
+
+                return curl;
+            }
             
-                // Advect along local wind field
-                float3 advected = baseP + flowDir * t;
+            float SampleCloudNoise(float3 dir, float height01)
+            {
+                float tCurl = -_NoiseOffset.x; // westward rotation (radians-ish)
+                float tBoil = _NoiseOffset.y; // boiling / time
             
-                // Use t as a 3rd dimension so clouds morph (appear/disappear)
-                // rather than just sliding in from “offscreen”.
-                float timeWarp = t * 0.25;   // how quickly shapes change; tweak to taste
+                // rotate the sampling direction around the planet's Y axis
+                float3 dRot = RotateAroundY(dir, tCurl);
             
-                float3 p = float3(advected.xy, advected.z + timeWarp) + _CloudSeed;
+                // optional height warp (0..1 in your frag)
+                //float hWarp = (height01 - 0.5) * _HeightNoiseScale;
+                //dRot.y = saturate(dRot.y + hWarp);
             
-                return noise3D(p);
+                float baseFreq = _CloudFrequency;
+            
+                // octave 1
+                float3 p0 = dRot * baseFreq;
+                p0 += float3(0, tBoil * _BoilFrequency, 0) + _CloudSeed;
+            
+                // octave 2
+                float3 p1 = dRot * (baseFreq * 2.0);
+                p1 += float3(0, tBoil * _BoilFrequency + 7.13, 0) + _CloudSeed * 2.0;
+            
+                float n0 = noise3D(p0);
+                float n1 = noise3D(p1);
+            
+                return n0 * 0.65 + n1 * 0.35;
             }
 
             Varyings vert(Attributes IN)
@@ -223,31 +228,31 @@ Shader "EcoCore/CloudShell"
 
             half4 frag(Varyings IN) : SV_Target
             {
-                // Direction from planet center (for sphere noise)
-                float3 dir  = normalize(IN.worldPos - _PlanetCenter.xyz);
-                float3 flow = ComputeBandFlow(dir);
-                float n = sampleSphereNoiseScrolled(dir, flow);
+                float3 center = _PlanetCenter.xyz;
+                float3 dir    = normalize(IN.worldPos - center);
 
-                float density = 0.0;
-                if (n >= _CoverageBias)
-                {
-                    density = saturate((n - _CoverageBias) / max(1.0 - _CoverageBias, 1e-4));
-                }
-
-                // 2. Radial soft fade across the whole shell
-                float r      = distance(IN.worldPos, _PlanetCenter.xyz);
+                // radial shell info
+                float r      = distance(IN.worldPos, center);
                 float innerR = _CloudInnerRadius;
                 float outerR = _CloudOuterRadius;
                 float shellT = max(outerR - innerR, 1e-4);
 
                 float radialT = saturate((r - innerR) / shellT);
 
-                float bottomFade = smoothstep(0.0, _SoftBottom, radialT);
-                float topFade    = smoothstep(1.0, 1.0 - _SoftTop, radialT);
+                // height within shell 0..1
+                float height01 = radialT;
 
-                density *= bottomFade * topFade;
+                // 1) sample 3D noise with curl-based offset & boiling
+                float n = SampleCloudNoise(dir, height01);
 
-                // 3. Camera clearance bubble (_WorldSpaceCameraPos is provided by Unity)
+                // 2) coverage shaping
+                float density = 0.0;
+                if (n >= _CoverageBias)
+                {
+                    density = saturate((n - _CoverageBias) / max(1.0 - _CoverageBias, 1e-4));
+                }
+
+                // 3) camera clearance bubble
                 float inner = _ClearanceRadius;
                 float outer = _ClearanceRadius + _ClearanceFade;
 

@@ -25,20 +25,25 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
+    - _BoilFrequency: 1
     - _CellsPerFace: 32
     - _ClearanceFade: 15
     - _ClearanceRadius: 25
     - _CloudFrequency: 0.25
-    - _CloudInnerRadius: 50
+    - _CloudInnerRadius: 60
     - _CloudOpacity: 1
-    - _CloudOuterRadius: 90
+    - _CloudOuterRadius: 80
     - _CloudSeed: 67420
     - _CoverageBias: 0.4
+    - _CurlFrequency: 0
+    - _CurlStrength: 0
     - _DensityBoost: 3
     - _DensityPower: 2.15
+    - _DensityScale: 1.5
     - _EdgeBlendStrength: 0
     - _EqBandLimit: 0.25
     - _EqBandSpeed: 1
+    - _HeightNoiseScale: 0.5
     - _MidBandLimit: 0.6
     - _MidBandSpeed: 0.7
     - _MinAlpha: 0
@@ -47,6 +52,7 @@ Material:
     - _PuffStrength: 1
     - _SoftBottom: 0.2
     - _SoftTop: 0.2
+    - _VolumeSteps: 16
     m_Colors:
     - _CloudColor: {r: 1, g: 1, b: 1, a: 1}
     - _NoiseOffset: {r: 0, g: 0, b: 0, a: 0}

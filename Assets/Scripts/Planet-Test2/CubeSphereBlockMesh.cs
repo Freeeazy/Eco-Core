@@ -329,10 +329,11 @@ public class CubeSphereBlockMesh : MonoBehaviour
         }
 
         Mesh mesh = meshFilter.sharedMesh;
-        if (mesh == null)
+        if (mesh == null || mesh.name != "CubeSphereBlockMesh")
         {
             mesh = new Mesh();
             mesh.name = "CubeSphereBlockMesh";
+            meshFilter.sharedMesh = mesh;
         }
         else
         {
