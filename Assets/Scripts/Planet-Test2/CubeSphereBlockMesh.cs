@@ -59,6 +59,12 @@ public class CubeSphereBlockMesh : MonoBehaviour
     [Tooltip("Relative humidity per cell, 0–100.")]
     [HideInInspector] public float[] cellHumidity;
     public int TotalCells => cellCenterDirection != null ? cellCenterDirection.Length : 0;
+    public int CellsPerFace => cellsPerFace;
+    public bool[] CellIsLand => cellIsLand;
+    public float[] CellElevation => cellElevation;
+    public float[] CellHumidity => cellHumidity;
+    public Vector3[] CellCenterDirection => cellCenterDirection;
+    public float[] CellLatitude => cellLatitude;
 
     // Directions for the 6 cube faces (like a dice)
     private static readonly Vector3[] faceDirections =
@@ -97,6 +103,7 @@ public class CubeSphereBlockMesh : MonoBehaviour
         Vector3[] vertices = new Vector3[totalCells * vertsPerCell];
         Vector3[] normals = new Vector3[vertices.Length];
         Vector2[] uvs = new Vector2[vertices.Length];
+        Vector2[] uv2 = new Vector2[vertices.Length];
 
         // Triangles stored per submesh: 0 = land, 1 = water
         List<int> landTriangles = new List<int>(totalCells * 6 * 3);
@@ -268,6 +275,16 @@ public class CubeSphereBlockMesh : MonoBehaviour
                     normals[vStart + 6] = (t11 - center.position).normalized;
                     normals[vStart + 7] = (t01 - center.position).normalized;
 
+                    Vector2 faceUV = new Vector2(face, 0); // encode face index into uv2.x
+                    uv2[vStart + 0] = faceUV;
+                    uv2[vStart + 1] = faceUV;
+                    uv2[vStart + 2] = faceUV;
+                    uv2[vStart + 3] = faceUV;
+                    uv2[vStart + 4] = faceUV;
+                    uv2[vStart + 5] = faceUV;
+                    uv2[vStart + 6] = faceUV;
+                    uv2[vStart + 7] = faceUV;
+
                     // ----- Triangles -----
                     List<int> tris = isLand ? landTriangles : waterTriangles;
 
@@ -343,6 +360,7 @@ public class CubeSphereBlockMesh : MonoBehaviour
         mesh.vertices = vertices;
         mesh.normals = normals;
         mesh.uv = uvs;
+        mesh.uv2 = uv2;
 
         // Two submeshes: 0 = land, 1 = water
         mesh.subMeshCount = 2;
