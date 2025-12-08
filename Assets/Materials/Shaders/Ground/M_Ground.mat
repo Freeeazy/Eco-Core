@@ -46,13 +46,13 @@ Material:
     - _Metallic: 0.5
     - _QueueControl: 0
     - _QueueOffset: 0
-    - _SideDarkStrength: 1
+    - _SideDarkStrength: 0.5
     - _Smoothness: 0
     - _Thickness: 0.05
     m_Colors:
     - _BaseColor: {r: 0.23469625, g: 0.46226418, b: 0.128649, a: 0}
     - _GridColor: {r: 0.06519843, g: 0.14901961, b: 0.027450975, a: 0}
-    - _WaterColor: {r: 0, g: 0.8469183, b: 0.96981126, a: 0}
+    - _WaterColor: {r: 0.23529412, g: 0.4627451, b: 0.12941177, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
 --- !u!114 &8140088108773969164
