@@ -62,6 +62,10 @@ public class TemperatureManager : MonoBehaviour
     private float[] currentTemps;
 
     public bool IsInitialized => currentTemps != null && currentTemps.Length == (planet ? planet.TotalCells : 0);
+    public bool EnsureInitialized()
+    {
+        return TryInitialize();
+    }
 
     private void Start()
     {

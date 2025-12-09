@@ -9,6 +9,9 @@ public class HumidityManager : MonoBehaviour
     [Tooltip("SunRotate controller (for timeScale, day/year progression).")]
     public SunRotate sunRotate;
 
+    [Tooltip("Temperature manager providing per-cell temperatures (°C).")]
+    public TemperatureManager tempManager;
+
     [Header("Baseline Humidity Shaping")]
     [Tooltip("Baseline humidity at the equator (0–1).")]
     [Range(0f, 1f)]
@@ -51,14 +54,41 @@ public class HumidityManager : MonoBehaviour
     [Range(0f, 1f)]
     public float baseResponsePerHour = 0.05f;
 
-    [Tooltip("Land responds faster (1 = same as base, >1 = faster).")]
+    [Tooltip("Global multiplier for land response (kept for tuning).")]
     public float landResponseMultiplier = 1.0f;
 
-    [Tooltip("Water responds slower (1 = same as base, <1 = slower).")]
-    public float waterResponseMultiplier = 0.5f;
+    [Tooltip("Global multiplier for water response (kept for tuning).")]
+    public float waterResponseMultiplier = 1.0f;
 
     [Tooltip("Minimum simulated hours to accumulate before doing a humidity update step.")]
     public float minStepHours = 0.1f;   // ~6 in-game minutes at 1x
+
+    [Header("Dynamic Inertia by Environment")]
+    [Tooltip("Volatility for deep inland land (no nearby water). Higher = faster humidity changes.")]
+    public float innerLandVolatility = 1.5f;
+
+    [Tooltip("Volatility for coastal land (lots of nearby water). Higher = faster changes; lower = more buffered.")]
+    public float coastalLandVolatility = 0.75f;
+
+    [Tooltip("Volatility for oceans/lakes. Should be smallest; they change humidity slowest.")]
+    public float oceanVolatility = 0.25f;
+
+    [Header("Temperature Coupling")]
+    [Tooltip("Max humidity change from temp deviations (0–1 in humidity space).")]
+    [Range(0f, 0.5f)]
+    public float maxTempHumidityOffset = 0.15f;
+
+    [Tooltip("°C deviation from climate baseline that counts as 'full' temp effect.")]
+    public float tempDeviationForMaxEffect = 20f;
+
+    [Tooltip("Strength of drying/wetting over deep inland land due to temp.")]
+    public float inlandTempDryingStrength = 1.0f;
+
+    [Tooltip("Strength of temp-driven humidity changes over coastal land.")]
+    public float coastalTempHumidityStrength = 0.5f;
+
+    [Tooltip("Strength of temp-driven humidity changes over oceans.")]
+    public float oceanTempHumidityStrength = 0.5f;
 
     [Header("Debug")]
     [SerializeField] private float accumulatedSimHours = 0f;
@@ -68,6 +98,12 @@ public class HumidityManager : MonoBehaviour
     // Internal arrays (0–1 range for humidity)
     private float[] baselineHumidity01;
     private float[] currentHumidity01;
+
+    // For land tiles: how coastal they are (fraction of neighbors that are water, 0..1)
+    private float[] landWaterNeighborFraction;
+
+    // Climate baseline temperature per cell (°C), from lat + elevation only (no day/night).
+    private float[] baselineTempC;
 
     public bool IsInitialized =>
         planet &&
@@ -89,7 +125,6 @@ public class HumidityManager : MonoBehaviour
         if (!sunRotate)
             return;
 
-        // Use SunRotate's normalized time-of-day (0–1) as the single source of truth.
         float currentDayT = sunRotate.GetTimeOfDay(); // 0..1 over a full day
 
         // First frame: just initialize baseline.
@@ -99,19 +134,17 @@ public class HumidityManager : MonoBehaviour
             return;
         }
 
-        // Compute how much of a day has passed since last frame, with wrap-around at midnight.
+        // Day fraction advanced (handles wrap-around).
         float deltaDay = currentDayT - lastTimeOfDay;
         if (deltaDay < 0f)
         {
-            // We wrapped past 1 -> 0, so add 1.
             deltaDay += 1f;
         }
 
-        // Convert fraction of a day to in-game hours (24 hours per day).
         float simDeltaHours = deltaDay * 24f;
         accumulatedSimHours += simDeltaHours;
 
-        // Same trick as TemperatureManager: scale step size by timeScale so cost stays stable. :contentReference[oaicite:0]{index=0}
+        // Same trick as TemperatureManager: step size grows with timeScale so cost stays stable.
         float ts = Mathf.Max(sunRotate.timeScale, 0.0001f);
         float effectiveMinStepHours = minStepHours * ts;
         effectiveMinStepHoursDebug = effectiveMinStepHours;
@@ -136,28 +169,41 @@ public class HumidityManager : MonoBehaviour
         if (totalCells <= 0)
             return false;
 
+        if (tempManager != null)
+        {
+            tempManager.EnsureInitialized();
+        }
+
         if (baselineHumidity01 == null || baselineHumidity01.Length != totalCells)
         {
             baselineHumidity01 = new float[totalCells];
             currentHumidity01 = new float[totalCells];
+            landWaterNeighborFraction = new float[totalCells];
 
             BuildBaselineHumidity();
-            ApplyCoastalBoost();
+            ApplyCoastalBoostAndCacheCoastalness();
+            BuildBaselineTemperatureForHumidity(); // uses tempManager config if present
 
-            // Start current = baseline
+            // Start current = *temp-coupled* target if possible, otherwise baseline
             for (int i = 0; i < totalCells; i++)
             {
-                currentHumidity01[i] = baselineHumidity01[i];
+                if (tempManager != null && tempManager.IsInitialized && baselineTempC != null)
+                {
+                    currentHumidity01[i] = ComputeHumidityTarget01(i);
+                }
+                else
+                {
+                    currentHumidity01[i] = baselineHumidity01[i];
+                }
             }
 
-            // Write initial humidity (0–100) back to planet for shaders / debug
+            // sync to planet 0–100
             if (planet.cellHumidity == null || planet.cellHumidity.Length != totalCells)
-            {
                 planet.cellHumidity = new float[totalCells];
-            }
+
             for (int i = 0; i < totalCells; i++)
             {
-                planet.cellHumidity[i] = currentHumidity01[i] * 100f;
+                planet.cellHumidity[i] = Mathf.Clamp01(currentHumidity01[i]) * 100f;
             }
         }
 
@@ -171,7 +217,6 @@ public class HumidityManager : MonoBehaviour
     private void BuildBaselineHumidity()
     {
         int totalCells = planet.TotalCells;
-        int steps = planet.CellsPerFace;
 
         for (int i = 0; i < totalCells; i++)
         {
@@ -208,12 +253,19 @@ public class HumidityManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Second pass: land cells near water get a coastal humidity boost.
+    /// Second pass: land cells near water get a coastal humidity boost
+    /// AND we cache how coastal each land cell is (0..1 water neighbor fraction).
     /// </summary>
-    private void ApplyCoastalBoost()
+    private void ApplyCoastalBoostAndCacheCoastalness()
     {
         int totalCells = planet.TotalCells;
         int steps = planet.CellsPerFace;
+
+        // Initialize to zero in case of re-gen
+        for (int i = 0; i < totalCells; i++)
+        {
+            landWaterNeighborFraction[i] = 0f;
+        }
 
         for (int i = 0; i < totalCells; i++)
         {
@@ -252,9 +304,18 @@ public class HumidityManager : MonoBehaviour
                 }
             }
 
+            float waterFraction = 0f;
+            if (neighborCount > 0)
+            {
+                waterFraction = (float)waterNeighbors / neighborCount; // 0..1
+            }
+
+            // Cache for dynamic sim (coastalness)
+            landWaterNeighborFraction[i] = waterFraction;
+
+            // Static coastal boost for baseline field
             if (neighborCount > 0 && waterNeighbors > 0 && coastalBoostMax > 0f)
             {
-                float waterFraction = (float)waterNeighbors / neighborCount; // 0..1
                 baselineHumidity01[i] = Mathf.Clamp01(
                     baselineHumidity01[i] + waterFraction * coastalBoostMax
                 );
@@ -263,8 +324,38 @@ public class HumidityManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Sim step: for now, humidity just relaxes toward the baseline field.
-    /// Later we can fold in temperature, evaporation, etc.
+    /// Build a "climate baseline" temperature per cell (°C) from latitude + elevation only.
+    /// This is what we compare the dynamic temperature field against when adjusting humidity.
+    /// </summary>
+    private void BuildBaselineTemperatureForHumidity()
+    {
+        if (tempManager == null || planet == null)
+        {
+            baselineTempC = null;
+            return;
+        }
+
+        int totalCells = planet.TotalCells;
+        baselineTempC = new float[totalCells];
+
+        for (int i = 0; i < totalCells; i++)
+        {
+            float latAbs = Mathf.Abs(planet.cellLatitude[i]); // 0 equator -> 1 poles
+            float baseLatTemp = Mathf.Lerp(tempManager.equatorTemp, tempManager.poleTemp, latAbs);
+
+            float elevWorld = Mathf.Max(0f, planet.cellElevation[i]); // only positive elevation
+            float elevKm = elevWorld / Mathf.Max(tempManager.worldUnitsPerKm, 0.0001f);
+            float elevOffset = -tempManager.lapseRatePerKm * elevKm;
+
+            baselineTempC[i] = baseLatTemp + elevOffset;
+        }
+    }
+
+    /// <summary>
+    /// Sim step: humidity relaxes toward a target influenced by:
+    /// - Static climate field (baselineHumidity01)
+    /// - Temp deviations from baseline (baselineTempC vs current temp)
+    /// - Environment inertia (ocean/coastal/inland)
     /// </summary>
     private void DoHumidityStep(float deltaHours)
     {
@@ -274,18 +365,27 @@ public class HumidityManager : MonoBehaviour
         {
             bool isLand = planet.cellIsLand[i];
 
-            float target = baselineHumidity01[i]; // dynamic stuff can be layered on later
-            float response = baseResponsePerHour *
-                             (isLand ? landResponseMultiplier : waterResponseMultiplier);
+            // Get the instantaneous target, including temperature effects.
+            float target = ComputeHumidityTarget01(i);
+
+            // Inertia / volatility
+            float response;
+            if (isLand)
+            {
+                float coastalness = Mathf.Clamp01(landWaterNeighborFraction[i]);
+                float volatility = Mathf.Lerp(innerLandVolatility, coastalLandVolatility, coastalness);
+                response = baseResponsePerHour * volatility * landResponseMultiplier;
+            }
+            else
+            {
+                response = baseResponsePerHour * oceanVolatility * waterResponseMultiplier;
+            }
 
             currentHumidity01[i] += (target - currentHumidity01[i]) * response * deltaHours;
         }
 
-        // Write back to planet in 0–100 for shaders / other systems
         for (int i = 0; i < totalCells; i++)
-        {
             planet.cellHumidity[i] = Mathf.Clamp01(currentHumidity01[i]) * 100f;
-        }
     }
 
     /// <summary>
@@ -300,5 +400,60 @@ public class HumidityManager : MonoBehaviour
             return 0f;
 
         return currentHumidity01[cellIndex];
+    }
+
+    private float ComputeHumidityTarget01(int i)
+    {
+        bool isLand = planet.cellIsLand[i];
+        float target = baselineHumidity01[i];
+
+        // --- Temperature coupling block (same as in DoHumidityStep) ---
+        if (tempManager != null && baselineTempC != null && i < baselineTempC.Length)
+        {
+            float currentTemp = tempManager.GetCellTemperature(i); // °C
+            float climateTemp = baselineTempC[i];
+
+            float tempDelta = currentTemp - climateTemp;
+            if (Mathf.Abs(tempDelta) > 0.001f && maxTempHumidityOffset > 0f)
+            {
+                float norm = Mathf.Clamp(
+                    tempDelta / Mathf.Max(tempDeviationForMaxEffect, 0.0001f),
+                    -1f, 1f
+                );
+                float mag = maxTempHumidityOffset * Mathf.Abs(norm);
+                float sign = Mathf.Sign(norm);
+
+                if (isLand)
+                {
+                    float coastalness = Mathf.Clamp01(landWaterNeighborFraction[i]);
+                    float inlandFactor = 1f - coastalness;
+
+                    float inlandEffect = 0f;
+                    if (inlandFactor > 0f)
+                    {
+                        if (sign > 0f) // warmer inland → drier
+                            inlandEffect = -mag * inlandTempDryingStrength * inlandFactor;
+                        else if (sign < 0f) // colder inland → slightly wetter
+                            inlandEffect = mag * inlandTempDryingStrength * 0.5f * inlandFactor;
+                    }
+
+                    float coastalEffect = 0f;
+                    if (coastalness > 0f)
+                    {
+                        coastalEffect = mag * coastalTempHumidityStrength * coastalness * sign;
+                    }
+
+                    target = Mathf.Clamp01(target + inlandEffect + coastalEffect);
+                }
+                else
+                {
+                    // Oceans/lakes
+                    float waterEffect = mag * oceanTempHumidityStrength * sign;
+                    target = Mathf.Clamp01(target + waterEffect);
+                }
+            }
+        }
+
+        return target;
     }
 }
