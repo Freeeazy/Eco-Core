@@ -97,6 +97,7 @@ public class CubeSphereBlockMesh : MonoBehaviour
         cellIsLand = new bool[totalCells];
         cellHumidity = new float[totalCells];
 
+        float[] baseHumidity01 = new float[totalCells];
         // Each cell: 8 vertices (4 bottom, 4 top)
         int vertsPerCell = 8;
 
@@ -193,38 +194,6 @@ public class CubeSphereBlockMesh : MonoBehaviour
 
                     // Elevation relative to base radius (can be negative for deep oceans)
                     cellElevation[cellIndex] = cellBaseRadius - radius;
-
-                    // 1) Start from latitude-based pattern:
-                    //    - Wet at equator
-                    //    - Drier toward poles
-                    float latAbs = Mathf.Abs(cellLatitude[cellIndex]); // 0 at equator, 1 at poles
-                    float baseHum01 = Mathf.Lerp(1.0f, 0.1f, latAbs);   // equator ~1.0, poles ~0.2
-
-                    // 2) Subtropical dry belt around |lat| ~ 0.5 (≈30°): deserts
-                    //    We subtract some humidity there using a simple "bump" function.
-                    //    (You can tweak the 0.5 center and 0.15 width later.)
-                    float desertBelt = Mathf.Exp(-Mathf.Pow((latAbs - 0.333f) / 0.15f, 2f)); // 0..1
-                    baseHum01 -= desertBelt * 0.5f; // up to -0.5 humidity in desert belt
-
-                    // 3) Oceans are more humid than land
-                    if (!isLand)
-                    {
-                        baseHum01 += 0.25f; // extra moisture over water
-                    }
-
-                    // 4) High elevation is drier (mountains)
-                    if (cellElevation[cellIndex] > 0f)
-                    {
-                        // scale elevation to some "mountain height" range
-                        // assuming your typical mountains are in ~0..20 range; tweak as needed
-                        float elevNorm = Mathf.Clamp01(cellElevation[cellIndex] / 20f);
-                        baseHum01 -= elevNorm * 0.3f;
-                    }
-
-                    // 5) Clamp to [0,1] and scale to [0,100]
-                    baseHum01 = Mathf.Clamp01(baseHum01);
-                    cellHumidity[cellIndex] = baseHum01 * 100f;
-                    // --------------------------------
 
                     float cellTopRadius = cellBaseRadius + blockHeight;
 
