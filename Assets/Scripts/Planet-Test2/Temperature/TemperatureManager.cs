@@ -99,7 +99,7 @@ public class TemperatureManager : MonoBehaviour
         accumulatedSimHours += simDeltaHours;
 
         float ts = Mathf.Max(sunRotate.timeScale, 0.0001f);      // avoid zero
-        float effectiveMinStepHours = minStepHours * ts;         // 1:1 scaling (5x -> 5 * minStepHours)
+        float effectiveMinStepHours = minStepHours * ts;         // 1:1 scaling (5x -> 5 * minStepHours) ;)
         effectiveMinStepHoursDebug = effectiveMinStepHours;
 
         if (accumulatedSimHours >= effectiveMinStepHours)
