@@ -198,12 +198,12 @@ public class CubeSphereBlockMesh : MonoBehaviour
                     //    - Wet at equator
                     //    - Drier toward poles
                     float latAbs = Mathf.Abs(cellLatitude[cellIndex]); // 0 at equator, 1 at poles
-                    float baseHum01 = Mathf.Lerp(1.0f, 0.2f, latAbs);   // equator ~1.0, poles ~0.2
+                    float baseHum01 = Mathf.Lerp(1.0f, 0.1f, latAbs);   // equator ~1.0, poles ~0.2
 
                     // 2) Subtropical dry belt around |lat| ~ 0.5 (≈30°): deserts
                     //    We subtract some humidity there using a simple "bump" function.
                     //    (You can tweak the 0.5 center and 0.15 width later.)
-                    float desertBelt = Mathf.Exp(-Mathf.Pow((latAbs - 0.5f) / 0.15f, 2f)); // 0..1
+                    float desertBelt = Mathf.Exp(-Mathf.Pow((latAbs - 0.333f) / 0.15f, 2f)); // 0..1
                     baseHum01 -= desertBelt * 0.5f; // up to -0.5 humidity in desert belt
 
                     // 3) Oceans are more humid than land

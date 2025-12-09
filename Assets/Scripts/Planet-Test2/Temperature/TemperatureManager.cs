@@ -56,6 +56,7 @@ public class TemperatureManager : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private float accumulatedSimHours = 0f;
     [SerializeField] private float lastTimeOfDay = -1f;
+    [SerializeField] private float effectiveMinStepHoursDebug;
 
     // Current temperatures per cell (°C)
     private float[] currentTemps;
@@ -95,10 +96,13 @@ public class TemperatureManager : MonoBehaviour
 
         // Convert fraction of a day to in-game hours (24 hours per day).
         float simDeltaHours = deltaDay * 24f;
-
         accumulatedSimHours += simDeltaHours;
 
-        if (accumulatedSimHours >= minStepHours)
+        float ts = Mathf.Max(sunRotate.timeScale, 0.0001f);      // avoid zero
+        float effectiveMinStepHours = minStepHours * ts;         // 1:1 scaling (5x -> 5 * minStepHours)
+        effectiveMinStepHoursDebug = effectiveMinStepHours;
+
+        if (accumulatedSimHours >= effectiveMinStepHours)
         {
             float stepHours = accumulatedSimHours;
             accumulatedSimHours = 0f;
