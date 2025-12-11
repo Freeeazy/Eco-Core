@@ -10,6 +10,7 @@ public class CubeSphereCellPicker : MonoBehaviour
 
     [Header("Managers")]
     [SerializeField] private TemperatureManager temperatureManager;
+    [SerializeField] private CSphereBiomeManager biomeManager;
 
     [Header("UI")]
     [SerializeField] private TextMeshProUGUI cellLocationText;
@@ -17,6 +18,7 @@ public class CubeSphereCellPicker : MonoBehaviour
     [SerializeField] private TextMeshProUGUI cellLatText;
     [SerializeField] private TextMeshProUGUI cellTempText;
     [SerializeField] private TextMeshProUGUI cellHumidityText;
+    [SerializeField] private TextMeshProUGUI cellBiomeText;
 
     [Header("Raycast")]
     [SerializeField] private float maxDistance = 10000f;
@@ -127,6 +129,12 @@ public class CubeSphereCellPicker : MonoBehaviour
         {
             float hum = planet.cellHumidity[cellIndex]; // already 0–100
             cellHumidityText.text = $"Humidity: {hum:F1} %";
+        }
+
+        if (cellBiomeText && biomeManager)
+        {
+            string biome = biomeManager.GetBiomeName(cellIndex);
+            cellBiomeText.text = $"Biome: {biome}";
         }
     }
 }

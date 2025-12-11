@@ -112,6 +112,14 @@ public class HumidityManager : MonoBehaviour
         baselineHumidity01.Length == planet.TotalCells &&
         currentHumidity01.Length == planet.TotalCells;
 
+    public bool EnsureInitialized()
+    {
+        if (IsInitialized)
+            return true;
+
+        return TryInitialize();
+    }
+
     private void Start()
     {
         TryInitialize();
