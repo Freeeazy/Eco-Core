@@ -1,54 +1,127 @@
 using UnityEngine;
 using TMPro;
 
-public class PlanetTimeDisplay : MonoBehaviour
+public class PlanetCalendarDisplay : MonoBehaviour
 {
     [Header("References")]
-    public SunRotate sun;               // drag your SunRotate here
+    public SunRotate sun;
 
-    [Header("UI Outputs")]
-    public TMP_Text dayText;
-    public TMP_Text yearText;
+    [Header("UI Output (single text)")]
+    public TMP_Text calendarText;
     public TMP_Text timeScaleText;
 
-    // internal counters (sync with SunRotate's looping behavior)
-    private int currentDay = 0;
-    private int currentYear = 0;
+    [Header("Calendar Rules")]
+    public int daysPerYear = 60;
+    public int daysPerSeason = 15; // 4 seasons -> 60
+    public int daysPerMonth = 5;   // 12 months -> 60
 
-    private float dayAccumulator = 0f;
+    [Header("Start Date")]
+    public int startYear = 1850;
+    [Range(1, 12)] public int startMonth = 1; // 1..12 (5-day months)
+    [Range(1, 5)] public int startDay = 1;   // 1..5
+
+    // Optional names (you can change these later)
+    public string[] seasonNames = { "Spring", "Summer", "Fall", "Winter" };
+    public string[] monthNames =
+    {
+        "Aster","Brine","Cinder","Dawn","Ember","Frost",
+        "Gale","Haze","Iris","Jade","Kite","Lumen"
+    };
+
+    private int totalDays;          // days since start date (0+)
+    private float dayAccumulator;   // seconds accumulator
+
+    private void Awake()
+    {
+        totalDays = EncodeToTotalDays(startYear, startMonth, startDay);
+        UpdateLabel();
+    }
 
     private void Update()
     {
-        if (sun == null) return;
+        if (sun == null || calendarText == null) return;
 
-        // --- 1. Compute REAL day progress based on timeOfDay ---
-        // SunRotate wraps timeOfDay when a day completes.
-        float dayLength = sun.dayLengthSeconds;        // seconds per day
+        float dayLength = Mathf.Max(0.0001f, sun.dayLengthSeconds);
         float dt = Time.deltaTime * sun.timeScale;
 
         dayAccumulator += dt;
 
-        if (dayAccumulator >= dayLength)
+        // handle fast-forward (50x etc)
+        while (dayAccumulator >= dayLength)
         {
             dayAccumulator -= dayLength;
-            currentDay++;
-
-            // wrap day -> increase year
-            if (currentDay >= sun.daysPerYear)
-            {
-                currentDay = 0;
-                currentYear++;
-            }
+            totalDays++;
         }
 
-        // --- 2. Update UI text fields ---
-        if (dayText != null)
-            dayText.text = $"Day: {currentDay}";
+        UpdateLabel();
 
-        if (yearText != null)
-            yearText.text = $"Year: {currentYear}";
+        if (timeScaleText != null) timeScaleText.text = $"Time Scale: {sun.timeScale}x";
+    }
 
-        if (timeScaleText != null)
-            timeScaleText.text = $"Time Scale: {sun.timeScale}x";
+    private void UpdateLabel()
+    {
+        DecodeFromTotalDays(totalDays,
+            out int year, out int month, out int day, out int dayOfYear,
+            out int seasonIndex, out int dayOfSeason);
+
+        string monthStr = (monthNames != null && monthNames.Length >= (daysPerYear / daysPerMonth))
+            ? monthNames[month - 1]
+            : $"M{month}";
+
+        string seasonStr = (seasonNames != null && seasonNames.Length >= (daysPerYear / daysPerSeason))
+            ? seasonNames[seasonIndex]
+            : $"S{seasonIndex + 1}";
+
+        // Example formats (pick one):
+        // calendarText.text = $"{month}/{day}/{year}";
+        calendarText.text = $"{monthStr} {day}, {year}  •  {seasonStr} {dayOfSeason + 1}/{daysPerSeason}";
+        // Or: calendarText.text = $"Y{year}  D{dayOfYear + 1}/{daysPerYear}";
+    }
+
+    // ----- Conversion helpers -----
+
+    // Encodes a starting Y/M/D into the total-day counter
+    private int EncodeToTotalDays(int year, int month, int day)
+    {
+        // month: 1..12, day: 1..5
+        month = Mathf.Clamp(month, 1, 12);
+        day = Mathf.Clamp(day, 1, daysPerMonth);
+
+        int yearsOffset = 0; // if you want "year 0" start, change this
+        int dayOfYear = (month - 1) * daysPerMonth + (day - 1);
+
+        // totalDays from some epoch: year * daysPerYear + dayOfYear
+        return (year - startYear + yearsOffset) * daysPerYear + dayOfYear;
+    }
+
+    // Decodes totalDays -> Y/M/D + season info
+    private void DecodeFromTotalDays(int t,
+        out int year, out int month, out int day, out int dayOfYear,
+        out int seasonIndex, out int dayOfSeason)
+    {
+        if (t < 0) t = 0;
+
+        int yearsSinceStart = t / daysPerYear;
+        dayOfYear = t % daysPerYear;
+
+        year = startYear + yearsSinceStart;
+
+        month = (dayOfYear / daysPerMonth) + 1;         // 1..12
+        day = (dayOfYear % daysPerMonth) + 1;           // 1..5
+
+        seasonIndex = Mathf.Clamp(dayOfYear / daysPerSeason, 0, 3); // 0..3
+        dayOfSeason = dayOfYear % daysPerSeason;        // 0..14
+    }
+
+    // Optional: allow other systems to jump date
+    public void SetDate(int year, int month, int day)
+    {
+        // Convert to absolute day count relative to startYear
+        int yearsSinceStart = year - startYear;
+        int dayOfYear = (Mathf.Clamp(month, 1, 12) - 1) * daysPerMonth + (Mathf.Clamp(day, 1, daysPerMonth) - 1);
+        totalDays = Mathf.Max(0, yearsSinceStart * daysPerYear + dayOfYear);
+
+        dayAccumulator = 0f;
+        UpdateLabel();
     }
 }
