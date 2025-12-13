@@ -12,6 +12,13 @@ public class CubeSphereCellPicker : MonoBehaviour
     [SerializeField] private TemperatureManager temperatureManager;
     [SerializeField] private CSphereBiomeManager biomeManager;
 
+    [Header("Highlight Material (your ground material that uses the shadergraph)")]
+    [SerializeField] private Material groundMaterial;
+
+    [Header("Shader Property Names")]
+    [SerializeField] private string hoverCellProp = "_HoverCell";
+    [SerializeField] private string selectedCellProp = "_SelectedCell";
+
     [Header("UI")]
     [SerializeField] private TextMeshProUGUI cellLocationText;
     [SerializeField] private TextMeshProUGUI cellFaceText;
@@ -25,8 +32,12 @@ public class CubeSphereCellPicker : MonoBehaviour
     [SerializeField] private LayerMask raycastMask = ~0;
 
     private Camera cam;
-    private int lastCellIndex = -1;
 
+    private Mesh cachedMesh;
+    private int[] cachedTris;
+
+    private int hoveredCellIndex = -1;
+    private int selectedCellIndex = -1;
     private void Awake()
     {
         cam = GetComponent<Camera>();
@@ -34,51 +45,82 @@ public class CubeSphereCellPicker : MonoBehaviour
         // auto-find collider if not wired
         if (!planetCollider && planet)
             planetCollider = planet.GetComponent<MeshCollider>();
+
+        CacheMeshData();
+        PushHoverSelectedToMaterial();
+    }
+
+    private void CacheMeshData()
+    {
+        if (!planetCollider) return;
+
+        cachedMesh = planetCollider.sharedMesh;
+        if (cachedMesh != null)
+            cachedTris = cachedMesh.triangles; // cache once so hover doesn’t allocate/work hard
     }
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0))
-            HandleClick(Input.mousePosition);
+        // In case mesh regenerates at runtime (rare, but can happen in editor/ExecuteAlways workflows)
+        if (planetCollider && planetCollider.sharedMesh != cachedMesh)
+            CacheMeshData();
 
-        if (lastCellIndex >= 0)
+        // Hover every frame
+        hoveredCellIndex = GetCellUnderMouse(Input.mousePosition);
+
+        // Click selects
+        if (Input.GetMouseButtonDown(0) && hoveredCellIndex >= 0)
         {
-            UpdateCellInfo(lastCellIndex);
+            selectedCellIndex = hoveredCellIndex;
+            UpdateCellInfo(selectedCellIndex); // refresh UI on click
         }
+
+        // Keep UI updating for selected cell (your existing behavior)
+        if (selectedCellIndex >= 0)
+            UpdateCellInfo(selectedCellIndex);
+
+        // Feed highlight ints to shader
+        PushHoverSelectedToMaterial();
     }
 
-    private void HandleClick(Vector3 screenPos)
+    private int GetCellUnderMouse(Vector3 screenPos)
     {
-        if (!planet || !planetCollider) return;
+        if (!planet || !planetCollider || cachedMesh == null || cachedTris == null || cachedTris.Length == 0)
+            return -1;
 
         Ray ray = cam.ScreenPointToRay(screenPos);
 
-        if (Physics.Raycast(ray, out RaycastHit hit, maxDistance, raycastMask))
-        {
-            if (hit.collider != planetCollider)
-                return;
+        if (!Physics.Raycast(ray, out RaycastHit hit, maxDistance, raycastMask))
+            return -1;
 
-            Mesh mesh = planetCollider.sharedMesh;
-            if (!mesh) return;
+        if (hit.collider != planetCollider)
+            return -1;
 
-            // Use main triangles only (submesh 0 indices)
-            int[] tris = mesh.triangles;
+        int triStart = hit.triangleIndex * 3;
+        if (triStart + 2 >= cachedTris.Length)
+            return -1;
 
-            int triStart = hit.triangleIndex * 3;
-            int v0 = tris[triStart + 0];
-            int v1 = tris[triStart + 1];
-            int v2 = tris[triStart + 2];
+        int v0 = cachedTris[triStart + 0];
+        int v1 = cachedTris[triStart + 1];
+        int v2 = cachedTris[triStart + 2];
 
-            // Each cell uses 8 vertices in order -> decode cell index
-            int cellVertexIndex = Mathf.Min(v0, Mathf.Min(v1, v2));
-            int cellIndex = cellVertexIndex / 8;
+        // Each cell uses 8 vertices in order -> decode cell index (your exact logic) :contentReference[oaicite:1]{index=1}
+        int cellVertexIndex = Mathf.Min(v0, Mathf.Min(v1, v2));
+        int cellIndex = cellVertexIndex / 8;
 
-            // Store for continuous updates
-            lastCellIndex = cellIndex;
+        // Safety clamp
+        if (cellIndex < 0 || cellIndex >= planet.TotalCells)
+            return -1;
 
-            // Immediately refresh UI once on click
-            UpdateCellInfo(cellIndex);
-        }
+        return cellIndex;
+    }
+
+    private void PushHoverSelectedToMaterial()
+    {
+        if (!groundMaterial) return;
+
+        groundMaterial.SetInt(hoverCellProp, hoveredCellIndex);
+        groundMaterial.SetInt(selectedCellProp, selectedCellIndex);
     }
 
     /// <summary>

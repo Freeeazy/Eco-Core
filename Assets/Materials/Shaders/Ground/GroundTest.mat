@@ -43,15 +43,21 @@ Material:
     m_Ints: []
     m_Floats:
     - _CellsPerFace: 32
+    - _HoverCell: -1
     - _Metallic: 0.5
+    - _OutlineThickness: 0.15
     - _QueueControl: 0
     - _QueueOffset: 0
+    - _SelectedCell: 4745
     - _SideDarkStrength: 0.5
     - _Smoothness: 0
     - _Thickness: 0.05
     m_Colors:
     - _BaseColor: {r: 0.23529412, g: 0.4627451, b: 0.12941177, a: 0}
     - _GridColor: {r: 0.06666667, g: 0.14901954, b: 0.02745098, a: 0}
+    - _HoverColor: {r: 0, g: 0.98578024, b: 1, a: 0}
+    - _PlanetCenterWS: {r: 0, g: 0, b: 0, a: 0}
+    - _SelectedColor: {r: 1, g: 0.28584793, b: 0, a: 0}
     - _WaterColor: {r: 1, g: 1, b: 1, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

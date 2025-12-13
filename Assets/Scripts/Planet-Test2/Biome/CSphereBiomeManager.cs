@@ -16,6 +16,16 @@ public class CSphereBiomeManager : MonoBehaviour
     [Tooltip("Minimum simulated hours before we rebuild the biome map.")]
     public float biomeMinStepHours = 24f;   // once per in-game day by default
 
+    [Header("Biome Hysteresis / Inertia")]
+    [Tooltip("How many in-game DAYS a cell must stay in a NEW biome's range before switching.")]
+    public float daysToSwitchBiome = 10f;
+
+    [Tooltip("How many in-game DAYS to 'recover' back toward stable (prevents flip-flop). Lower = faster recovery.")]
+    public float daysToRecover = 5f;
+
+    [Tooltip("If true, we only allow switching to the single best-matching biome (instead of first match).")]
+    public bool useBestMatchInsteadOfFirst = false;
+
     [SerializeField] private float biomeAccumulatedHours = 0f;
     [SerializeField] private float lastDayT = -1f;
     [SerializeField] private float biomeEffectiveMinStepHoursDebug;
@@ -51,6 +61,30 @@ public class CSphereBiomeManager : MonoBehaviour
 
             return true;
         }
+
+        // Used only if useBestMatchInsteadOfFirst = true
+        public float Score(bool isLand, float tempC, float humidity01)
+        {
+            if (landOnly && !isLand) return -1f;
+            if (waterOnly && isLand) return -1f;
+
+            // If outside range, hard reject
+            if (tempC < minTempC || tempC > maxTempC) return -1f;
+            if (humidity01 < minHumidity01 || humidity01 > maxHumidity01) return -1f;
+
+            // Prefer center of the range (simple “distance to center” score)
+            float tCenter = 0.5f * (minTempC + maxTempC);
+            float hCenter = 0.5f * (minHumidity01 + maxHumidity01);
+
+            float tHalf = Mathf.Max(0.0001f, 0.5f * (maxTempC - minTempC));
+            float hHalf = Mathf.Max(0.0001f, 0.5f * (maxHumidity01 - minHumidity01));
+
+            float tNorm = Mathf.Abs(tempC - tCenter) / tHalf;        // 0 center -> 1 edge
+            float hNorm = Mathf.Abs(humidity01 - hCenter) / hHalf;
+
+            // Higher is better
+            return 1f - 0.5f * (tNorm + hNorm);
+        }
     }
 
     [Header("Biome Table")]
@@ -59,6 +93,13 @@ public class CSphereBiomeManager : MonoBehaviour
 
     Texture2D cellMap;
     int n;                  // cellsPerFace
+
+    // --- Hysteresis state per cell ---
+    private int[] currentBiomeIndex;      // committed biome
+    private int[] candidateBiomeIndex;    // target we are “considering”
+    private float[] candidateProgress01;  // 0..1 progress toward switching
+
+    private bool didInitialBuild = false;
 
     void Reset()
     {
@@ -209,57 +250,85 @@ public class CSphereBiomeManager : MonoBehaviour
     void Start()
     {
         TryInitTexture();
+        TryEnsureBiomeStateArrays();
+        TryInitialBuild();
     }
-
+    void OnEnable()
+    {
+        // Helpful when entering play mode / reloading scripts with ExecuteAlways
+        TryInitTexture();
+        TryEnsureBiomeStateArrays();
+        TryInitialBuild();
+    }
     void Update()
     {
-        // Make sure texture + references are valid
         if (!TryInitTexture())
             return;
 
         if (!tempManager || !humidityManager || !sunRotate)
             return;
 
-        // Make sure temp/humidity systems are initialized
+        // Ensure upstream systems
         if (!tempManager.EnsureInitialized())
             return;
 
         if (!humidityManager.EnsureInitialized())
             return;
 
-        // --- Time accumulation (same idea as TemperatureManager) ---
+        TryEnsureBiomeStateArrays();
+        TryInitialBuild();
+
+        // --- Time accumulation ---
         float currentDayT = sunRotate.GetTimeOfDay(); // 0..1 over a full day
 
-        // First frame: just capture baseline
+        // First frame after initialization: capture baseline but DO NOT early-return forever.
         if (lastDayT < 0f)
         {
             lastDayT = currentDayT;
+            biomeAccumulatedHours = 0f;
             return;
         }
 
         float deltaDay = currentDayT - lastDayT;
-        if (deltaDay < 0f)
-            deltaDay += 1f; // wrap 1 -> 0
+        if (deltaDay < 0f) deltaDay += 1f;
 
         float simDeltaHours = deltaDay * 24f;
         biomeAccumulatedHours += simDeltaHours;
 
-        // Let timeScale stretch the step the same way TemperatureManager does
-        float ts = Mathf.Max(sunRotate.timeScale, 0.0001f);
-        float effectiveMinStepHours = biomeMinStepHours * ts;
-        biomeEffectiveMinStepHoursDebug = effectiveMinStepHours;
+        bool didAnyBiomeStep = false;
 
-        if (biomeAccumulatedHours >= effectiveMinStepHours)
+        // --- FIXED-STEP BIOME UPDATES (exact 24h chunks) ---
+        while (biomeAccumulatedHours >= biomeMinStepHours)
         {
-            // Rebuild biomes based on the *current* temp + humidity fields
-            BuildBiomeMap();
-            biomeAccumulatedHours = 0f;
+            DoBiomeStep(biomeMinStepHours); // always exactly 24h
+            biomeAccumulatedHours -= biomeMinStepHours;
+            didAnyBiomeStep = true;
+        }
+
+        // --- Paint once per frame if anything changed ---
+        if (didAnyBiomeStep)
+        {
+            PaintBiomeMapFromCommitted();
         }
 
         lastDayT = currentDayT;
     }
 
-    bool TryInitTexture()
+    private void TryInitialBuild()
+    {
+        if (didInitialBuild) return;
+        if (!blockMesh || blockMesh.TotalCells <= 0) return;
+        if (!tempManager || !tempManager.IsInitialized) return;
+        if (!humidityManager || !humidityManager.IsInitialized) return;
+
+        // Commit initial biomes immediately (no waiting for first step)
+        InitializeCommittedBiomesFromCurrentClimate();
+        PaintBiomeMapFromCommitted();
+
+        didInitialBuild = true;
+    }
+
+    private bool TryInitTexture()
     {
         if (!blockMesh || !groundMaterial)
             return false;
@@ -280,34 +349,128 @@ public class CSphereBiomeManager : MonoBehaviour
 
         return true;
     }
+    private void TryEnsureBiomeStateArrays()
+    {
+        if (!blockMesh) return;
 
-    void BuildBiomeMap()
+        int totalCells = blockMesh.TotalCells;
+        if (totalCells <= 0) return;
+
+        if (currentBiomeIndex == null || currentBiomeIndex.Length != totalCells)
+        {
+            currentBiomeIndex = new int[totalCells];
+            candidateBiomeIndex = new int[totalCells];
+            candidateProgress01 = new float[totalCells];
+
+            for (int i = 0; i < totalCells; i++)
+            {
+                currentBiomeIndex[i] = -1;
+                candidateBiomeIndex[i] = -1;
+                candidateProgress01[i] = 0f;
+            }
+
+            didInitialBuild = false; // force rebuild after resize/regenerate
+            lastDayT = -1f;          // resync time
+            biomeAccumulatedHours = 0f;
+        }
+    }
+    private void InitializeCommittedBiomesFromCurrentClimate()
     {
         int totalCells = blockMesh.TotalCells;
 
         for (int cell = 0; cell < totalCells; cell++)
         {
-            bool isLand = blockMesh.cellIsLand[cell];
+            if (!blockMesh.cellIsLand[cell])
+            {
+                currentBiomeIndex[cell] = -1;
+                candidateBiomeIndex[cell] = -1;
+                candidateProgress01[cell] = 0f;
+                continue;
+            }
 
+            float tempC = tempManager.GetCellTemperature(cell);
+            float hum01 = humidityManager.GetCellHumidity01(cell);
+
+            int b = EvaluateBiomeIndex(true, tempC, hum01);
+            currentBiomeIndex[cell] = b;
+            candidateBiomeIndex[cell] = -1;
+            candidateProgress01[cell] = 0f;
+        }
+    }
+
+    private void DoBiomeStep(float stepHours)
+    {
+        int totalCells = blockMesh.TotalCells;
+        float stepDays = stepHours / 24f;
+
+        float switchRate = (daysToSwitchBiome <= 0.0001f) ? 9999f : (stepDays / daysToSwitchBiome);
+        float recoverRate = (daysToRecover <= 0.0001f) ? 9999f : (stepDays / daysToRecover);
+
+        for (int cell = 0; cell < totalCells; cell++)
+        {
+            if (!blockMesh.cellIsLand[cell])
+                continue;
+
+            float tempC = tempManager.GetCellTemperature(cell);
+            float hum01 = humidityManager.GetCellHumidity01(cell);
+
+            int target = EvaluateBiomeIndex(true, tempC, hum01);
+            int current = currentBiomeIndex[cell];
+
+            // If we have no committed biome yet, snap immediately.
+            if (current < 0)
+            {
+                currentBiomeIndex[cell] = target;
+                candidateBiomeIndex[cell] = -1;
+                candidateProgress01[cell] = 0f;
+                continue;
+            }
+
+            // If target is same as current, decay any pending transition (recovery).
+            if (target == current)
+            {
+                candidateBiomeIndex[cell] = -1;
+                candidateProgress01[cell] = Mathf.Max(0f, candidateProgress01[cell] - recoverRate);
+                continue;
+            }
+
+            // Target differs: accumulate toward switching.
+            if (candidateBiomeIndex[cell] != target)
+            {
+                // New candidate (conditions changed) -> reset progress
+                candidateBiomeIndex[cell] = target;
+                candidateProgress01[cell] = 0f;
+            }
+
+            candidateProgress01[cell] += switchRate;
+
+            if (candidateProgress01[cell] >= 1f)
+            {
+                currentBiomeIndex[cell] = target;
+                candidateBiomeIndex[cell] = -1;
+                candidateProgress01[cell] = 0f;
+            }
+        }
+    }
+    private void PaintBiomeMapFromCommitted()
+    {
+        int totalCells = blockMesh.TotalCells;
+
+        for (int cell = 0; cell < totalCells; cell++)
+        {
             Color c;
 
-            if (!isLand)
+            if (!blockMesh.cellIsLand[cell])
             {
-                // Let ocean material handle water; keep this black.
-                c = Color.black;
+                c = Color.black; // water handled elsewhere
             }
             else
             {
-                float tempC = 0f;
-                float humidity01 = 0f;
-
-                if (tempManager && tempManager.IsInitialized)
-                    tempC = tempManager.GetCellTemperature(cell);
-
-                if (humidityManager && humidityManager.IsInitialized)
-                    humidity01 = humidityManager.GetCellHumidity01(cell);
-
-                c = EvaluateBiomeColor(isLand, tempC, humidity01);
+                int b = currentBiomeIndex[cell];
+                if (b >= 0 && biomes != null && b < biomes.Length && biomes[b] != null)
+                    c = biomes[b].color;
+                else
+                    c = Color.magenta; // obvious fallback
             }
 
             var (px, py) = CellToPixel(cell);
@@ -317,24 +480,44 @@ public class CSphereBiomeManager : MonoBehaviour
         cellMap.Apply();
         groundMaterial.SetTexture("_CellMap", cellMap);
     }
-
-    Color EvaluateBiomeColor(bool isLand, float tempC, float humidity01)
+    private int EvaluateBiomeIndex(bool isLand, float tempC, float humidity01)
     {
-        if (biomes != null)
+        if (biomes == null || biomes.Length == 0)
+            return -1;
+
+        if (!useBestMatchInsteadOfFirst)
         {
             for (int i = 0; i < biomes.Length; i++)
             {
                 var b = biomes[i];
                 if (b != null && b.Contains(isLand, tempC, humidity01))
-                    return b.color;
+                    return i;
             }
+            return -1;
         }
+        else
+        {
+            int best = -1;
+            float bestScore = -1f;
 
-        // Fallback so "unmapped" regions are obvious.
-        return Color.magenta;
+            for (int i = 0; i < biomes.Length; i++)
+            {
+                var b = biomes[i];
+                if (b == null) continue;
+
+                float s = b.Score(isLand, tempC, humidity01);
+                if (s > bestScore)
+                {
+                    bestScore = s;
+                    best = i;
+                }
+            }
+
+            return best;
+        }
     }
 
-    (int x, int y) CellToPixel(int cell)
+    private (int x, int y) CellToPixel(int cell)
     {
         int n2 = n * n;
         int face = cell / n2;
@@ -360,22 +543,15 @@ public class CSphereBiomeManager : MonoBehaviour
         if (biomes == null || cellIndex < 0 || cellIndex >= blockMesh.TotalCells)
             return "Unknown";
 
-        bool isLand = blockMesh.cellIsLand[cellIndex];
+        if (!blockMesh.cellIsLand[cellIndex])
+            return "Water";
 
-        float tempC = tempManager && tempManager.IsInitialized
-            ? tempManager.GetCellTemperature(cellIndex)
-            : 0f;
+        int b = (currentBiomeIndex != null && cellIndex < currentBiomeIndex.Length)
+            ? currentBiomeIndex[cellIndex]
+            : -1;
 
-        float humidity01 = humidityManager && humidityManager.IsInitialized
-            ? humidityManager.GetCellHumidity01(cellIndex)
-            : 0f;
-
-        for (int i = 0; i < biomes.Length; i++)
-        {
-            var b = biomes[i];
-            if (b != null && b.Contains(isLand, tempC, humidity01))
-                return b.name;
-        }
+        if (b >= 0 && b < biomes.Length && biomes[b] != null)
+            return biomes[b].name;
 
         return "Unassigned";
     }
