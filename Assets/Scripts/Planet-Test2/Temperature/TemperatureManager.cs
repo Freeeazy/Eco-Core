@@ -53,6 +53,10 @@ public class TemperatureManager : MonoBehaviour
     [Tooltip("Minimum simulated hours to accumulate before doing a temp update step.")]
     public float minStepHours = 0.1f;   // ~6 in-game minutes
 
+    [Header("Global Climate Offset")]
+    [Tooltip("Global temperature offset applied to all tiles (°C). Represents pollution / cooling.")]
+    public float planetTempOffset = 0f;
+
     [Header("Debug")]
     [SerializeField] private float accumulatedSimHours = 0f;
     [SerializeField] private float lastTimeOfDay = -1f;
@@ -197,6 +201,9 @@ public class TemperatureManager : MonoBehaviour
         float elevationOffset = -lapseRatePerKm * elevationKm;
 
         float target = baseLatTemp + diurnal + elevationOffset;
+
+        // Global climate offset (pollution / cooling)
+        target += planetTempOffset;
 
         return target;
     }

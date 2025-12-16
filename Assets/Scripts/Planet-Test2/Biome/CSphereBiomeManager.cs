@@ -26,6 +26,14 @@ public class CSphereBiomeManager : MonoBehaviour
     [Tooltip("If true, we only allow switching to the single best-matching biome (instead of first match).")]
     public bool useBestMatchInsteadOfFirst = false;
 
+    [Header("Biome Visualization")]
+    [Tooltip("If true, cells that are transitioning will blend between current and candidate biome colors.")]
+    public bool visualizeTransitions = true;
+
+    [Range(0f, 1f)]
+    [Tooltip("Optional: ease the blend so early progress is more visible (0=linear, 1=more eased).")]
+    public float transitionEase = 0.35f;
+
     [SerializeField] private float biomeAccumulatedHours = 0f;
     [SerializeField] private float lastDayT = -1f;
     [SerializeField] private float biomeEffectiveMinStepHoursDebug;
@@ -466,11 +474,43 @@ public class CSphereBiomeManager : MonoBehaviour
             }
             else
             {
-                int b = currentBiomeIndex[cell];
-                if (b >= 0 && biomes != null && b < biomes.Length && biomes[b] != null)
-                    c = biomes[b].color;
+                int cur = currentBiomeIndex != null ? currentBiomeIndex[cell] : -1;
+
+                // Base committed color
+                Color curCol = (cur >= 0 && biomes != null && cur < biomes.Length && biomes[cur] != null)
+                    ? biomes[cur].color
+                    : Color.magenta;
+
+                if (!visualizeTransitions)
+                {
+                    c = curCol;
+                }
                 else
-                    c = Color.magenta; // obvious fallback
+                {
+                    int cand = (candidateBiomeIndex != null) ? candidateBiomeIndex[cell] : -1;
+                    float p = (candidateProgress01 != null) ? candidateProgress01[cell] : 0f;
+
+                    // If we have an active candidate and some progress, blend toward it
+                    if (cand >= 0 && p > 0f && biomes != null && cand < biomes.Length && biomes[cand] != null)
+                    {
+                        Color candCol = biomes[cand].color;
+
+                        // Ease so you see motion earlier (optional, but feels nicer)
+                        float eased = p;
+                        if (transitionEase > 0f)
+                        {
+                            // simple ease-in-out-ish curve
+                            float smooth = p * p * (3f - 2f * p); // SmoothStep
+                            eased = Mathf.Lerp(p, smooth, transitionEase);
+                        }
+
+                        c = Color.Lerp(curCol, candCol, eased);
+                    }
+                    else
+                    {
+                        c = curCol;
+                    }
+                }
             }
 
             var (px, py) = CellToPixel(cell);
@@ -540,19 +580,27 @@ public class CSphereBiomeManager : MonoBehaviour
     }
     public string GetBiomeName(int cellIndex)
     {
-        if (biomes == null || cellIndex < 0 || cellIndex >= blockMesh.TotalCells)
-            return "Unknown";
-
-        if (!blockMesh.cellIsLand[cellIndex])
-            return "Water";
-
-        int b = (currentBiomeIndex != null && cellIndex < currentBiomeIndex.Length)
+        int cur = (currentBiomeIndex != null && cellIndex < currentBiomeIndex.Length)
             ? currentBiomeIndex[cellIndex]
             : -1;
 
-        if (b >= 0 && b < biomes.Length && biomes[b] != null)
-            return biomes[b].name;
+        int cand = (candidateBiomeIndex != null && cellIndex < candidateBiomeIndex.Length)
+            ? candidateBiomeIndex[cellIndex]
+            : -1;
 
-        return "Unassigned";
+        float p = (candidateProgress01 != null && cellIndex < candidateProgress01.Length)
+            ? candidateProgress01[cellIndex]
+            : 0f;
+
+        string curName = (cur >= 0 && cur < biomes.Length && biomes[cur] != null) ? biomes[cur].name : "Unassigned";
+
+        if (cand >= 0 && p > 0f && cand < biomes.Length && biomes[cand] != null)
+        {
+            string candName = biomes[cand].name;
+            int pct = Mathf.RoundToInt(p * 100f);
+            return $"{curName} -> {candName} ({pct}%)";
+        }
+
+        return curName;
     }
 }
