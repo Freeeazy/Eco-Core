@@ -23,25 +23,97 @@ public class MouseObjectSpin : MonoBehaviour
     [Tooltip("Require the mouse to move at least this many pixels before a new trigger is allowed.")]
     public float requireMouseMovePixels = 6f;
 
+    [Header("Idle Curvature (Default State)")]
+    [Range(-1f, 1f)] public float curveU = 0f;  // per-letter placement
+    public float baseCurveStrength = 0.08f;     // how concave
+    public float breatheAmp = 0.06f;            // percent modulation
+    public float breatheSpeed = 0.25f;          // slow
+    public float idleBlendInSeconds = 0.6f;
+    public float idleBlendOutSeconds = 0.2f;
+
+    public float idleZScale = 0.02f;            // optional: edge scale boost
+    public float stationaryPixelsPerSec = 10f;  // “not moving” threshold
+    public float stationaryDelay = 0.35f;       // time before idle returns while hovered
+
     private Quaternion restRotation;
     private Camera cam;
     private Coroutine running;
-
 
     private float lastTriggerTime = -999f;
     private Vector2 lastTriggerMousePos;
     private bool hasMousePos;
 
+    private Vector3 restLocalPos;
+    private Vector3 restLocalScale;
+    private bool hovered;
+
+    private Vector2 lastMouse;
+    private float stationaryTimer;
+    private float idleBlend; // 0..1
+    private bool isSpinning;
+
     void Awake()
     {
-        restRotation = transform.localRotation;
         cam = Camera.main;
         spinAxis = spinAxis.sqrMagnitude > 0f ? spinAxis.normalized : Vector3.up;
+        restRotation = transform.localRotation;
+        restLocalPos = transform.localPosition;
+        restLocalScale = transform.localScale;
+        lastMouse = Input.mousePosition;
     }
 
     void OnMouseEnter()
     {
+        hovered = true;
         TriggerSpin();
+    }
+    void OnMouseExit() 
+    { 
+        hovered = false; 
+    }
+
+    private void Update()
+    {
+        Vector2 mouse = Input.mousePosition;
+        float mouseSpeed = (mouse - lastMouse).magnitude / Mathf.Max(Time.unscaledDeltaTime, 0.0001f);
+        lastMouse = mouse;
+
+        bool mouseMoving = mouseSpeed > stationaryPixelsPerSec;
+
+        if (mouseMoving) stationaryTimer = 0f;
+        else stationaryTimer += Time.unscaledDeltaTime;
+
+        // Allow idle when we're not spinning AND (not hovered OR hovered-but-stationary long enough)
+        bool idleAllowed =
+            !isSpinning &&
+            (
+                !hovered ||
+                stationaryTimer >= stationaryDelay
+            );
+
+        // Blend target
+        float targetIdleBlend = idleAllowed ? 1f : 0f;
+
+        // Different speeds for blend in vs out
+        float blendSpeed = (targetIdleBlend > idleBlend)
+            ? (1f / Mathf.Max(idleBlendInSeconds, 0.0001f))
+            : (1f / Mathf.Max(idleBlendOutSeconds, 0.0001f));
+
+        idleBlend = Mathf.MoveTowards(idleBlend, targetIdleBlend, blendSpeed * Time.unscaledDeltaTime);
+
+        float t = Time.unscaledTime;
+        float curveStrength = baseCurveStrength * (1f + Mathf.Sin(t * breatheSpeed) * breatheAmp);
+
+        float u2 = curveU * curveU;
+
+        float zOffset = -u2 * curveStrength;
+        float s = 1f + u2 * curveStrength * idleZScale;
+
+        Vector3 idlePos = restLocalPos + Vector3.forward * zOffset;
+        Vector3 idleScale = restLocalScale * s;
+
+        transform.localPosition = Vector3.Lerp(restLocalPos, idlePos, idleBlend);
+        transform.localScale = Vector3.Lerp(restLocalScale, idleScale, idleBlend);
     }
 
     void TriggerSpin()
@@ -93,6 +165,7 @@ public class MouseObjectSpin : MonoBehaviour
 
     System.Collections.IEnumerator SpinRoutine(float direction)
     {
+        isSpinning = true;
         float totalDegrees = fullSpins * 360f + Mathf.Abs(extraDegrees);
         float sign = Mathf.Sign(direction);
 
@@ -130,6 +203,7 @@ public class MouseObjectSpin : MonoBehaviour
         }
 
         transform.localRotation = restRotation;
+        isSpinning = false;
         running = null;
     }
 }
