@@ -1,0 +1,105 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5967141470600838362
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6328873681104639072}
+  - component: {fileID: 7544370362233934335}
+  - component: {fileID: 1458863057507210827}
+  m_Layer: 0
+  m_Name: WorldManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6328873681104639072
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5967141470600838362}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 5.263856, y: 1.0891578, z: 22.577715}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7544370362233934335
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5967141470600838362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3cc6b26e624835c488623f83a35e2efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  planet: {fileID: 0}
+  sunRotate: {fileID: 0}
+  sunDirectionTransform: {fileID: 0}
+  equatorTemp: 35
+  poleTemp: -15
+  dayBoostLand: 15
+  nightDropLand: 10
+  dayBoostWater: 8
+  nightDropWater: 5
+  worldUnitsPerKm: 1
+  lapseRatePerKm: 6
+  baseResponsePerHour: 0.1
+  landResponseMultiplier: 1.5
+  waterResponseMultiplier: 0.5
+  minStepHours: 0.1
+  planetTempOffset: 0
+  accumulatedSimHours: 0
+  lastTimeOfDay: -1
+  effectiveMinStepHoursDebug: 0
+--- !u!114 &1458863057507210827
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5967141470600838362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7fb5146af37f12148846a70bd66fc63d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  planet: {fileID: 0}
+  sunRotate: {fileID: 0}
+  tempManager: {fileID: 7544370362233934335}
+  equatorHumidity: 1
+  poleHumidity: 0.1
+  desertBeltCenterLatAbs: 0.3
+  desertBeltWidth: 0.175
+  desertBeltDepth: 0.5
+  oceanHumidityBonus: 0.25
+  mountainDryStrength: 0.3
+  mountainHeightWorldUnits: 20
+  coastalBoostMax: 0.3
+  baseResponsePerHour: 0.05
+  landResponseMultiplier: 1
+  waterResponseMultiplier: 0.5
+  minStepHours: 0.2
+  innerLandVolatility: 1.5
+  coastalLandVolatility: 0.75
+  oceanVolatility: 0.25
+  maxTempHumidityOffset: 0.15
+  tempDeviationForMaxEffect: 20
+  inlandTempDryingStrength: 1
+  coastalTempHumidityStrength: 0.5
+  oceanTempHumidityStrength: 0.5
+  accumulatedSimHours: 0
+  lastTimeOfDay: -1
+  effectiveMinStepHoursDebug: 0
