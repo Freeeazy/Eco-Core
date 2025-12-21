@@ -58,6 +58,9 @@ public class CubeSphereBlockMesh : MonoBehaviour
 
     [Tooltip("Relative humidity per cell, 0–100.")]
     [HideInInspector] public float[] cellHumidity;
+
+    [HideInInspector] public Vector3[] cellSurfaceCenterWS;
+    [HideInInspector] public Quaternion[] cellSurfaceRotationWS;
     public int TotalCells => cellCenterDirection != null ? cellCenterDirection.Length : 0;
     public int CellsPerFace => cellsPerFace;
     public bool[] CellIsLand => cellIsLand;
@@ -96,6 +99,8 @@ public class CubeSphereBlockMesh : MonoBehaviour
         cellElevation = new float[totalCells];
         cellIsLand = new bool[totalCells];
         cellHumidity = new float[totalCells];
+        cellSurfaceCenterWS = new Vector3[totalCells];
+        cellSurfaceRotationWS = new Quaternion[totalCells];
 
         float[] baseHumidity01 = new float[totalCells];
         // Each cell: 8 vertices (4 bottom, 4 top)
@@ -210,6 +215,25 @@ public class CubeSphereBlockMesh : MonoBehaviour
                     Vector3 t01 = center.position + d01 * cellTopRadius;
 
                     int vStart = vertIndex;
+
+                    Vector3 centerWS = (t00 + t10 + t11 + t01) * 0.25f;
+
+                    Vector3 right = (t10 - t00).normalized;
+                    Vector3 forward = (t01 - t00).normalized;
+                    Vector3 up = Vector3.Cross(right, forward).normalized;
+
+                    // Ensure outward (away from planet center)
+                    Vector3 radialUp = (centerWS - center.position).normalized;
+                    if (Vector3.Dot(up, radialUp) < 0f)
+                    {
+                        up = -up;
+                        forward = -forward;
+                    }
+
+                    forward = Vector3.Cross(up, right).normalized; // orthonormalize
+
+                    cellSurfaceCenterWS[cellIndex] = centerWS;
+                    cellSurfaceRotationWS[cellIndex] = Quaternion.LookRotation(forward, up);
 
                     // Order: bottom quad (00,10,11,01), top quad (00,10,11,01)
                     vertices[vertIndex++] = b00; // 0

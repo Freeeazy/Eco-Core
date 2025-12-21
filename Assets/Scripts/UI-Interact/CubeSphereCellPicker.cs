@@ -14,6 +14,7 @@ public class CubeSphereCellPicker : MonoBehaviour
 
     [Header("Highlight Material (your ground material that uses the shadergraph)")]
     [SerializeField] private Material groundMaterial;
+    [SerializeField] private Material waterMaterial;
 
     [Header("Shader Property Names")]
     [SerializeField] private string hoverCellProp = "_HoverCell";
@@ -38,6 +39,12 @@ public class CubeSphereCellPicker : MonoBehaviour
 
     private int hoveredCellIndex = -1;
     private int selectedCellIndex = -1;
+
+    public int SelectedCellIndex => selectedCellIndex;
+    public int HoveredCellIndex => hoveredCellIndex;
+    public CubeSphereBlockMesh Planet => planet;
+    public MeshCollider PlanetCollider => planetCollider;
+
     private void Awake()
     {
         cam = GetComponent<Camera>();
@@ -121,6 +128,11 @@ public class CubeSphereCellPicker : MonoBehaviour
 
         groundMaterial.SetInt(hoverCellProp, hoveredCellIndex);
         groundMaterial.SetInt(selectedCellProp, selectedCellIndex);
+
+        if (!waterMaterial) return;
+
+        waterMaterial.SetInt(hoverCellProp, hoveredCellIndex);
+        waterMaterial.SetInt(selectedCellProp, selectedCellIndex);
     }
 
     /// <summary>
