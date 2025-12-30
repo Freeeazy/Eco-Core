@@ -61,7 +61,7 @@ Material:
     - _OutlineThickness: 0.15
     - _QueueControl: 0
     - _QueueOffset: 0
-    - _SelectedCell: 3800
+    - _SelectedCell: -1
     - _SideDarkStrength: 0.5
     - _Smoothness: 0
     - _Thickness: 0.05
