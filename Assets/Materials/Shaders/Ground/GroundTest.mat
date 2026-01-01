@@ -45,10 +45,10 @@ Material:
     - _CellsPerFace: 32
     - _HoverCell: -1
     - _Metallic: 0.5
-    - _OutlineThickness: 0.15
+    - _OutlineThickness: 0.1
     - _QueueControl: 0
     - _QueueOffset: 0
-    - _SelectedCell: -1
+    - _SelectedCell: 2489
     - _SideDarkStrength: 0.5
     - _Smoothness: 0
     - _Thickness: 0.05

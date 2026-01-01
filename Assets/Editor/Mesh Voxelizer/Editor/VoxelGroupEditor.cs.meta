@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 72e37a0acf8d2bd4fb73936e9c0478e7
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150233
+  packageName: Mesh Voxelizer
+  packageVersion: 3.1
+  assetPath: Assets/Ice Pond/Mesh Voxelizer/Editor/VoxelGroupEditor.cs
+  uploadId: 638097

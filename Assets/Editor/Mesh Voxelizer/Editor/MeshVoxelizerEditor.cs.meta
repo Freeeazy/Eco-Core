@@ -1,0 +1,20 @@
+fileFormatVersion: 2
+guid: 3bee8c9bcb7f17743961e08f9f24725f
+timeCreated: 1612270734
+licenseType: Store
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150233
+  packageName: Mesh Voxelizer
+  packageVersion: 3.1
+  assetPath: Assets/Ice Pond/Mesh Voxelizer/Editor/MeshVoxelizerEditor.cs
+  uploadId: 638097

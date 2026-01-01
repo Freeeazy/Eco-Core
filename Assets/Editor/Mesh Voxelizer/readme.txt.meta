@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 63d81f27272535548a6dbdb4bad28359
+timeCreated: 1562689323
+licenseType: Store
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150233
+  packageName: Mesh Voxelizer
+  packageVersion: 3.1
+  assetPath: Assets/Ice Pond/Mesh Voxelizer/readme.txt
+  uploadId: 638097

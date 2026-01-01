@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 27de85efec7570243aef4fccf3e7a729
+timeCreated: 1568124533
+licenseType: Store
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 4300000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150233
+  packageName: Mesh Voxelizer
+  packageVersion: 3.1
+  assetPath: Assets/Ice Pond/Mesh Voxelizer/Resources/DefaultVoxelCube.asset
+  uploadId: 638097

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 0e2f503b83713194189803d4f28e102c
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150233
+  packageName: Mesh Voxelizer
+  packageVersion: 3.1
+  assetPath: Assets/Ice Pond/Mesh Voxelizer/Resources/MeshVoxelizerPreset.asset
+  uploadId: 638097

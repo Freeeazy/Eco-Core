@@ -1,0 +1,20 @@
+fileFormatVersion: 2
+guid: f629f64f086ce51428c76a9ca7b3d97e
+timeCreated: 1571412000
+licenseType: Store
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150233
+  packageName: Mesh Voxelizer
+  packageVersion: 3.1
+  assetPath: Assets/Ice Pond/Mesh Voxelizer/Scripts/VoxelGroup.cs
+  uploadId: 638097
