@@ -74,7 +74,10 @@ public class PlanetCalendarDisplay : MonoBehaviour
 
         // Example formats (pick one):
         // calendarText.text = $"{month}/{day}/{year}";
-        calendarText.text = $"{monthStr} {day}, {year}  •  {seasonStr} {dayOfSeason + 1}/{daysPerSeason}";
+        if (calendarText != null)
+        {
+            calendarText.text = $"{monthStr} {day}, {year}  •  {seasonStr} {dayOfSeason + 1}/{daysPerSeason}";
+        }
         // Or: calendarText.text = $"Y{year}  D{dayOfYear + 1}/{daysPerYear}";
     }
 

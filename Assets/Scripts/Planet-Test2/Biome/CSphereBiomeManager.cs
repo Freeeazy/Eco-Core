@@ -263,11 +263,21 @@ public class CSphereBiomeManager : MonoBehaviour
     }
     void OnEnable()
     {
+        if (blockMesh != null)
+            blockMesh.OnPlanetGenerated += RebuildFromGeneratedPlanet;
+
         // Helpful when entering play mode / reloading scripts with ExecuteAlways
         TryInitTexture();
         TryEnsureBiomeStateArrays();
         TryInitialBuild();
     }
+
+    void OnDisable()
+    {
+        if (blockMesh != null)
+            blockMesh.OnPlanetGenerated -= RebuildFromGeneratedPlanet;
+    }
+
     void Update()
     {
         if (!TryInitTexture())
@@ -320,6 +330,33 @@ public class CSphereBiomeManager : MonoBehaviour
         }
 
         lastDayT = currentDayT;
+    }
+
+    public void RebuildFromGeneratedPlanet()
+    {
+        if (!TryInitTexture())
+            return;
+
+        TryEnsureBiomeStateArrays();
+
+        // force a fresh committed rebuild from the new planet layout
+        didInitialBuild = false;
+        lastDayT = -1f;
+        biomeAccumulatedHours = 0f;
+
+        if (!tempManager || !humidityManager)
+            return;
+
+        if (!tempManager.EnsureInitialized())
+            return;
+
+        if (!humidityManager.EnsureInitialized())
+            return;
+
+        InitializeCommittedBiomesFromCurrentClimate();
+        PaintBiomeMapFromCommitted();
+
+        didInitialBuild = true;
     }
 
     private void TryInitialBuild()

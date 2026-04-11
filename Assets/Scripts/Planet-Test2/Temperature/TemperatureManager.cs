@@ -76,6 +76,18 @@ public class TemperatureManager : MonoBehaviour
         TryInitialize();
     }
 
+    private void OnEnable()
+    {
+        if (planet != null)
+            planet.OnPlanetGenerated += RebuildFromGeneratedPlanet;
+    }
+
+    private void OnDisable()
+    {
+        if (planet != null)
+            planet.OnPlanetGenerated -= RebuildFromGeneratedPlanet;
+    }
+
     private void Update()
     {
         if (!TryInitialize())
@@ -119,6 +131,15 @@ public class TemperatureManager : MonoBehaviour
         }
 
         lastTimeOfDay = currentDayT;
+    }
+
+    public void RebuildFromGeneratedPlanet()
+    {
+        currentTemps = null;
+        accumulatedSimHours = 0f;
+        lastTimeOfDay = -1f;
+
+        TryInitialize();
     }
 
     private bool TryInitialize()

@@ -125,6 +125,18 @@ public class HumidityManager : MonoBehaviour
         TryInitialize();
     }
 
+    private void OnEnable()
+    {
+        if (planet != null)
+            planet.OnPlanetGenerated += RebuildFromGeneratedPlanet;
+    }
+
+    private void OnDisable()
+    {
+        if (planet != null)
+            planet.OnPlanetGenerated -= RebuildFromGeneratedPlanet;
+    }
+
     private void Update()
     {
         if (!TryInitialize())
@@ -166,6 +178,19 @@ public class HumidityManager : MonoBehaviour
         }
 
         lastTimeOfDay = currentDayT;
+    }
+
+    public void RebuildFromGeneratedPlanet()
+    {
+        baselineHumidity01 = null;
+        currentHumidity01 = null;
+        landWaterNeighborFraction = null;
+        baselineTempC = null;
+
+        accumulatedSimHours = 0f;
+        lastTimeOfDay = -1f;
+
+        TryInitialize();
     }
 
     private bool TryInitialize()

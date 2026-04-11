@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 /// <summary>
 /// 6-face cube-to-sphere block shell:
@@ -13,6 +14,8 @@ using UnityEngine;
 [RequireComponent(typeof(MeshRenderer))]
 public class CubeSphereBlockMesh : MonoBehaviour
 {
+    public event Action OnPlanetGenerated;
+
     [Header("Planet")]
     [Tooltip("Center of the planet. If null, uses this GameObject's transform.")]
     public Transform planetCenter;
@@ -378,6 +381,8 @@ public class CubeSphereBlockMesh : MonoBehaviour
             }
             mr.sharedMaterials = mats;
         }
+
+        OnPlanetGenerated?.Invoke();
     }
 
     /// <summary>

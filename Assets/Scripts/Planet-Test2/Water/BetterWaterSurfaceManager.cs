@@ -19,12 +19,49 @@ public class BetterWaterSurfaceManager : MonoBehaviour
     Texture2D cellMap;
     int n; // cellsPerFace
 
+    void OnEnable()
+    {
+        if (blockMesh != null)
+        {
+            blockMesh.OnPlanetGenerated += RebuildWaterMap;
+        }
+    }
+
+    void OnDisable()
+    {
+        if (blockMesh != null)
+        {
+            blockMesh.OnPlanetGenerated -= RebuildWaterMap;
+        }
+    }
+
     void Start()
     {
+        RebuildWaterMap();
+    }
+
+    public void RebuildWaterMap()
+    {
+        if (blockMesh == null || groundMaterial == null)
+        {
+            Debug.LogWarning("BetterWaterSurfaceManager: Missing blockMesh or groundMaterial.");
+            return;
+        }
+
+        if (blockMesh.TotalCells <= 0)
+        {
+            Debug.LogWarning("BetterWaterSurfaceManager: blockMesh has no generated cells yet.");
+            return;
+        }
+
         n = blockMesh.CellsPerFace;
-        cellMap = new Texture2D(n, n * 6, TextureFormat.RGBA32, false);
-        cellMap.filterMode = FilterMode.Point;
-        cellMap.wrapMode = TextureWrapMode.Clamp;
+
+        if (cellMap == null || cellMap.width != n || cellMap.height != n * 6)
+        {
+            cellMap = new Texture2D(n, n * 6, TextureFormat.RGBA32, false);
+            cellMap.filterMode = FilterMode.Point;
+            cellMap.wrapMode = TextureWrapMode.Clamp;
+        }
 
         for (int cell = 0; cell < blockMesh.TotalCells; cell++)
         {
@@ -32,7 +69,6 @@ public class BetterWaterSurfaceManager : MonoBehaviour
 
             if (!blockMesh.cellIsLand[cell])
             {
-                // Assume latitude in degrees [-90, 90]
                 float latSin = blockMesh.cellLatitude[cell];
                 float lat01 = Mathf.Abs(latSin);
 
@@ -40,7 +76,6 @@ public class BetterWaterSurfaceManager : MonoBehaviour
             }
             else
             {
-                // Non-land cells: you can keep them black/0 and let the water material handle them
                 c = Color.black;
             }
 
