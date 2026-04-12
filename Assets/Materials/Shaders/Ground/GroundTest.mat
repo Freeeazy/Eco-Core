@@ -43,12 +43,12 @@ Material:
     m_Ints: []
     m_Floats:
     - _CellsPerFace: 32
-    - _HoverCell: -1
+    - _HoverCell: 5228
     - _Metallic: 0.5
     - _OutlineThickness: 0.1
     - _QueueControl: 0
     - _QueueOffset: 0
-    - _SelectedCell: -1
+    - _SelectedCell: 5228
     - _SideDarkStrength: 0.5
     - _Smoothness: 0
     - _Thickness: 0.05

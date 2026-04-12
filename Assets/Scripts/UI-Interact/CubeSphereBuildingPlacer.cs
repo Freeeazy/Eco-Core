@@ -6,6 +6,7 @@ public class CubeSphereBuildingPlacer : MonoBehaviour
     [Header("References")]
     [SerializeField] private CubeSphereCellPicker picker;
     [SerializeField] private CubeSphereBlockMesh planet;
+    [SerializeField] private CityManager cityManager;
 
     [Header("Placement")]
     [SerializeField] private KeyCode placeKey = KeyCode.B;
@@ -13,6 +14,10 @@ public class CubeSphereBuildingPlacer : MonoBehaviour
     [SerializeField] private int selectedBuildingIndex = 0;
     [SerializeField] private Transform buildingsRoot;        // optional parent for cleanliness
     [SerializeField] private bool forbidWaterCells = false;  // optional rule
+
+    [Header("Building Limit")]
+    [SerializeField] private bool limitBuildingCount = true;
+    [SerializeField] private int maxBuildingCount = 1;
 
     // cellIndex -> spawned building
     private readonly Dictionary<int, GameObject> placed = new Dictionary<int, GameObject>();
@@ -68,6 +73,9 @@ public class CubeSphereBuildingPlacer : MonoBehaviour
         if (buildingOptions == null || buildingOptions.Count == 0)
             return;
 
+        if (limitBuildingCount && placed.Count >= maxBuildingCount)
+            return;
+
         selectedBuildingIndex = Mathf.Clamp(selectedBuildingIndex, 0, buildingOptions.Count - 1);
         BuildingOption opt = buildingOptions[selectedBuildingIndex];
 
@@ -103,6 +111,11 @@ public class CubeSphereBuildingPlacer : MonoBehaviour
         b.transform.position += (finalRot * Vector3.up) * opt.extraHeight;
 
         placed[cellIndex] = b;
+
+        if (cityManager != null)
+        {
+            cityManager.RegisterCity(cellIndex, "City " + (placed.Count));
+        }
     }
 
     // Conservative “good enough” fit for now:
